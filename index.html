@@ -1,0 +1,583 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { 
+  BookOpen, Download, Upload, CheckCircle, 
+  Lightbulb, ChevronRight, Loader2, Users, 
+  FileText, AlertCircle, Star, ArrowRight,
+  Library, Book, List, File 
+} from 'lucide-react';
+
+// ==========================================
+// 1. Utility Functions & Mock Data
+// ==========================================
+function exportToWord(elementId, filename, docTitle = "문서") {
+  const content = document.getElementById(elementId)?.innerHTML;
+  if (!content) return;
+
+  const header = `
+    <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+    <head>
+      <meta charset='utf-8'>
+      <title>${docTitle}</title>
+      <style>
+        body { font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; font-size: 11pt; line-height: 1.6; color: #000; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+        td, th { border: 1px solid #333; padding: 12px; }
+        ul, ol { margin-top: 5px; margin-bottom: 5px; padding-left: 20px; }
+        h1 { font-size: 1.8em; margin-bottom: 15px; }
+        h2 { font-size: 1.3em; margin-bottom: 10px; border-bottom: 2px solid #000; padding-bottom: 5px; }
+        h3 { font-size: 1.1em; margin-bottom: 8px; }
+      </style>
+    </head>
+    <body>
+  `;
+  const footer = "</body></html>";
+  const sourceHTML = header + content + footer;
+  
+  const source = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(sourceHTML);
+  const fileDownload = document.createElement("a");
+  document.body.appendChild(fileDownload);
+  fileDownload.href = source;
+  fileDownload.download = filename;
+  fileDownload.click();
+  document.body.removeChild(fileDownload);
+}
+
+function generateMockRecords(count) {
+  const records = [];
+  const templates = [
+    "수업 중 진행된 '개념 기반 탐구 학습'에서 탁월한 주도성을 보임. 교과서에 제시된 문학 작품의 비유적 표현을 분석하는 데 그치지 않고, 자신의 일상적인 경험을 참신한 은유법으로 연결하여 훌륭한 자작시를 창작함. 특히 서술형 형성평가에서 자신의 창작 의도와 비유의 심미적 효과를 5줄 이상의 논리적인 글로 명확하게 서술하며 IB 국어과 평가 준거 C(생산하기) 영역에서 높은 성취 보임.",
+    "매체 리터러시 연계 프로젝트에서 비판적 사고력(ATL)이 돋보이는 학생임. 형성평가지 서술형 문항을 통해 학교 내 점심시간 체육관 사용 문제를 해결하기 위한 구체적인 방안을 제안하고 그 논리적 타당성을 깊이 있게 논술함. 2022 개정 교육과정에서 강조하는 '깊이 있는 학습'을 실천하며 의사소통 역량이 우수함.",
+    "과정 중심 쓰기 워크숍에서 동료 피드백에 적극적으로 참여하고 자신의 글을 지속적으로 수정·보완하는 성찰적 태도(Reflective)가 돋보임. 탐구 성찰 일지 활동에서 처음에는 주장과 근거의 연결이 모호했으나 점차 타당성을 확보해가는 사고 과정을 구체적으로 기록함."
+  ];
+  for (let i = 0; i < count; i++) {
+    records.push({ id: i + 1, content: templates[i % templates.length] });
+  }
+  return records;
+}
+
+function generateMockIBPlanner(input) {
+  const mypYearMap = { '중학교 1학년': 2, '중학교 2학년': 3, '중학교 3학년': 4 };
+  const year = mypYearMap[input.grade] || 2;
+  const isWriting = input.topic.includes('쓰기') || input.topic.includes('주장');
+  
+  if (isWriting) {
+    return {
+      mypYear: year,
+      unitTitle: "세상을 바꾸는 나의 목소리 (논증적 글쓰기)",
+      keyConcept: "소통 (Communication)",
+      relatedConcepts: ["목적 (Purpose)", "관점 (Point of view)"],
+      globalContext: "공정성과 발달 (Fairness and development)",
+      statementOfInquiry: "작가는 명확한 목적과 논리적인 관점을 바탕으로 독자와 소통하며 사회의 공정성에 영향을 미친다.",
+      inquiryQuestions: { 
+        factual: "논증적 글쓰기의 기본 구조는 무엇인가?", 
+        conceptual: "관점의 차이는 글의 설득력에 어떤 영향을 미치는가?", 
+        debatable: "하나의 글이 사회적 인식을 진정으로 바꿀 수 있는가?" 
+      },
+      koreanCurriculum: ["[9국03-03] 타당한 근거를 들어 설득하는 글을 쓴다."],
+      learningProcess: [
+        "[도입] 일상 속 불편한 점 탐색 (탐구 질문 도입)", 
+        "[전개] 자료 조사를 통한 근거 마련 (비판적 사고 ATL 적용)", 
+        "[실행] 초고 작성 및 모둠별 상호 피드백 (과정 중심 쓰기 워크숍)",
+        "[정리] 최종본 완성 및 사회적 공유"
+      ],
+      flowchart: {
+        strategies: "과정 중심 쓰기 워크숍, 미니 레슨, 상호 동료 피드백",
+        emphasis: "실제 사회 문제와 연계한 진정성 있는 글쓰기 및 상호작용",
+        flow: [
+          "[도입] 문제 상황 인식 및 사실적 탐구 질문 도출",
+          "[전개1] 특정 문제에 대한 주장을 정하고 근거 조사",
+          "[전개2] 서-본-결 개요 작성 및 초고 완성",
+          "[전개3] IB 평가 루브릭 기반 동료 피드백 진행",
+          "[정리] 피드백 반영 최종본 완성 및 성찰 일지 작성"
+        ],
+        assessmentPlan: "형성평가(개요서 작성 점검), 총괄평가(서논술형 건의문 작성)",
+        expectedEffects: ["비판적 사고력 향상", "논리적 의사소통 능력 강화", "민주 시민 의식 고취"]
+      },
+      worksheetActivities: [
+        { title: "문제 상황 인식하기", desc: "우리 학교나 지역사회에서 개선이 필요하다고 생각하는 문제를 적어봅시다." },
+        { title: "설득하는 글 구조화하기", desc: "서론-본론-결론의 구조에 맞게 건의문의 개요를 작성해 봅시다." }
+      ],
+      formativeQuestions: [
+        { q: "논증적 글쓰기의 주된 목적은 무엇인가?", a: "타당한 근거를 들어 독자를 논리적으로 설득하는 것." },
+        { q: "학교 체육관 사용 규칙 개선에 대한 자신의 주장을 한 문장으로 쓰시오.", a: "(자유 작성)" }
+      ],
+      essayPrompt: "현재 발생하는 사회 문제 중 하나를 선택하여, 이를 해결하기 위한 건의문(논설문)을 작성하시오."
+    };
+  }
+
+  return {
+    mypYear: year,
+    unitTitle: "마음을 울리는 언어의 조각들 (시의 심상과 비유)",
+    keyConcept: "창의성 (Creativity)",
+    relatedConcepts: ["표현 (Expression)", "형식 (Form)"],
+    globalContext: "개인적 표현과 문화적 표현 (Personal and cultural expression)",
+    statementOfInquiry: "인간은 창의적인 형식과 비유적 표현을 통해 자신의 경험과 감정을 예술적으로 형상화한다.",
+    inquiryQuestions: { 
+      factual: "비유(직유, 은유, 의인 등)의 구체적인 종류와 특징은 무엇인가?", 
+      conceptual: "시인은 왜 자신의 감정을 직접 말하지 않고 비유를 사용하는가?", 
+      debatable: "문학 작품에 대한 해석은 독자마다 달라야만 하는가?" 
+    },
+    koreanCurriculum: ["[9국05-01] 비유와 상징의 표현 효과를 바탕으로 작품을 수용하고 생산한다."],
+    learningProcess: [
+      "[도입] 음악이나 그림 속에서 비유적 표현 찾기", 
+      "[탐구] 교과서 시를 읽고 모둠별 감상 나누기", 
+      "[실행] 일상 경험에서 참신한 비유를 끌어내어 자작시 창작하기",
+      "[정리] 시화전 개최 및 자기 성찰"
+    ],
+    flowchart: {
+      strategies: "개념 기반 탐구 학습, 감정 지도 그리기",
+      emphasis: "단순한 정답 찾기에서 벗어나 주도적인 감정 탐색과 미적 체험 강조",
+      flow: [
+        "[도입] 대중가요 가사에서 비유적 표현 찾고 질문 제기",
+        "[전개1] 직유, 은유, 의인 등 문학적 장치의 효과 파악",
+        "[전개2] 자신의 경험이나 감정을 시각화하는 감정 지도 그리기",
+        "[전개3] 낯설고 독창적인 비유를 포함한 자작시 완성",
+        "[정리] 학급 갤러리 워크 감상 및 성찰 일지 작성"
+      ],
+      assessmentPlan: "형성평가(비유 만들기 미니 미션), 총괄평가(자작시 창작 서술형)",
+      expectedEffects: ["창의적 표현 역량 증진", "내면 성찰적 태도 형성", "문학적 공감 능력 함양"]
+    },
+    worksheetActivities: [
+      { title: "내 마음의 원관념 찾기", desc: "최근 나의 감정이나 심리 상태를 나타내는 대상을 골라보세요." },
+      { title: "참신한 보조관념 연결하기", desc: "찾은 원관념을 독창적인 보조관념과 연결해 은유법으로 표현해보세요." }
+    ],
+    formativeQuestions: [
+      { q: "다음 중 은유법('A는 B이다')의 예시를 한 가지 작성하시오.", a: "(예: 내 마음은 호수요)" },
+      { q: "최근 느꼈던 강렬한 감정을 사물에 빗대어 한 문장으로 표현하시오.", a: "(자유 작성)" }
+    ],
+    essayPrompt: "최근 자신이 겪은 인상 깊은 경험이나 감정을 바탕으로 자작시를 창작하고, 비유적 표현의 효과를 설명하시오."
+  };
+}
+
+// ==========================================
+// 2. Main App Component
+// ==========================================
+export default function App() {
+  const [activeTab, setActiveTab] = useState('planner');
+
+  return (
+    <div className="flex h-screen bg-slate-50 font-sans text-slate-800 overflow-hidden">
+      {/* Sidebar */}
+      <aside className="w-72 bg-slate-900 flex flex-col z-20 shadow-xl">
+        <div className="p-6 flex items-center space-x-3 border-b border-slate-800">
+          <div className="bg-blue-600 p-2 rounded-xl">
+            <BookOpen className="h-6 w-6 text-white" />
+          </div>
+          <h1 className="text-[1.1rem] font-bold text-white tracking-tight leading-tight">
+            IB & 2022<br/>국어 수업 설계
+          </h1>
+        </div>
+
+        <nav className="p-4 space-y-2 flex-1">
+          <button onClick={() => setActiveTab('planner')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'planner' ? 'bg-blue-600 text-white font-bold' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+            <FileText size={20} /><span>교수학습과정안 설계</span>
+          </button>
+          <button onClick={() => setActiveTab('record')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'record' ? 'bg-blue-600 text-white font-bold' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+            <Star size={20} /><span>교과 세특 자동 생성</span>
+          </button>
+          <button onClick={() => setActiveTab('methods')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'methods' ? 'bg-blue-600 text-white font-bold' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+            <Lightbulb size={20} /><span>국어과 맞춤 수업 방법</span>
+          </button>
+          <button onClick={() => setActiveTab('resources')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'resources' ? 'bg-blue-600 text-white font-bold' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+            <Library size={20} /><span>교육과정 자료실</span>
+          </button>
+        </nav>
+
+        <div className="p-6 border-t border-slate-800">
+          <div className="bg-slate-800 rounded-xl p-4">
+            <p className="text-xs font-semibold text-slate-300">대구광역시교육청</p>
+            <p className="text-[10px] text-slate-500 mt-1">IB MYP & 2022 개정 최적화</p>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col h-screen relative overflow-hidden bg-slate-50">
+        <header className="h-16 bg-white/80 backdrop-blur border-b border-slate-200 flex items-center px-8 justify-between shadow-sm z-10 absolute top-0 w-full">
+          <h2 className="text-lg font-bold text-slate-800">
+            {activeTab === 'planner' && 'AI 맞춤형 수업 자료 설계'}
+            {activeTab === 'record' && 'AI 교과 세특 생성'}
+            {activeTab === 'methods' && '국어과 맞춤형 수업 방법'}
+            {activeTab === 'resources' && '교육과정 자료실'}
+          </h2>
+          <div className="flex items-center space-x-2 text-sm font-bold text-blue-600 bg-blue-50 py-1.5 px-4 rounded-full border border-blue-100">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+              <span className="relative rounded-full h-2 w-2 bg-blue-600"></span>
+            </span>
+            <span>AI Ready</span>
+          </div>
+        </header>
+
+        <div className="flex-1 overflow-y-auto p-8 pt-24 pb-20">
+          <div className="max-w-5xl mx-auto">
+            {activeTab === 'planner' && <PlannerView />}
+            {activeTab === 'record' && <RecordView />}
+            {activeTab === 'methods' && <MethodsView />}
+            {activeTab === 'resources' && <ResourcesView />}
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+// ==========================================
+// 3. Sub Views (Components)
+// ==========================================
+function PlannerView() {
+  const [step, setStep] = useState(1);
+  const [formData, setFormData] = useState({ grade: '중학교 1학년', scope: '단원 지도안 (Unit Planner)', sessions: 10, topic: '' });
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [plan, setPlan] = useState(null);
+  const [activeResultTab, setActiveResultTab] = useState('plan');
+  const [error, setError] = useState('');
+
+  const handleGenerate = (targetTab) => {
+    if (!formData.topic.trim()) {
+      setError("수업 주제나 교육과정 성취기준을 입력해주세요.");
+      return;
+    }
+    setError('');
+    setIsGenerating(true);
+    setStep(2);
+    
+    setTimeout(() => {
+      setPlan(generateMockIBPlanner(formData));
+      setActiveResultTab(targetTab);
+      setIsGenerating(false);
+      setStep(3);
+    }, 2000);
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <p className="text-slate-500 text-lg mb-6 leading-relaxed">
+        수업 주제를 입력하시면 2022 개정 교육과정과 IB MYP 철학을 융합한 <strong className="text-slate-800">단원 지도안, 활동지, 형성평가, 서논술형, 1쪽 흐름도</strong>를 자동 설계해 드립니다.
+      </p>
+
+      {error && (
+        <div className="bg-red-50 text-red-600 p-4 rounded-xl flex items-center space-x-2 border border-red-200">
+          <AlertCircle size={20} /> <span className="font-bold">{error}</span>
+        </div>
+      )}
+
+      {step === 1 && (
+        <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="space-y-2">
+              <label className="font-bold text-slate-700 text-sm">대상 학년</label>
+              <select className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200" value={formData.grade} onChange={(e) => setFormData({...formData, grade: e.target.value})}>
+                <option>중학교 1학년</option><option>중학교 2학년</option><option>중학교 3학년</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="font-bold text-slate-700 text-sm">설계 범위</label>
+              <select className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200" value={formData.scope} onChange={(e) => setFormData({...formData, scope: e.target.value})}>
+                <option>단원 지도안 (Unit Planner)</option><option>차시별 지도안</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="font-bold text-slate-700 text-sm">수업 시수</label>
+              <select className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 font-medium outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200" value={formData.sessions} onChange={(e) => setFormData({...formData, sessions: e.target.value})}>
+                {[...Array(10)].map((_, i) => <option key={i+1} value={i+1}>{i+1}차시</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="font-bold text-slate-700 text-sm">수업 주제 입력</label>
+            <textarea 
+              rows="3" 
+              className="w-full p-4 border border-slate-200 rounded-xl bg-slate-50 font-medium outline-none resize-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+              placeholder="단원명, 핵심 주제, 2022 개정 성취기준 등을 자유롭게 적어주세요. (예: 논증적 글쓰기를 통한 사회 참여)"
+              value={formData.topic}
+              onChange={(e) => setFormData({...formData, topic: e.target.value})}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 pt-4 border-t border-slate-100">
+            <ActionButton color="blue" label="과정안 생성" icon={<FileText size={20}/>} onClick={() => handleGenerate('plan')} />
+            <ActionButton color="teal" label="학습지 생성" icon={<BookOpen size={20}/>} onClick={() => handleGenerate('worksheet')} />
+            <ActionButton color="orange" label="형성평가 생성" icon={<CheckCircle size={20}/>} onClick={() => handleGenerate('assessment')} />
+            <ActionButton color="rose" label="서논술형 생성" icon={<Star size={20}/>} onClick={() => handleGenerate('essay')} />
+            <ActionButton color="cyan" label="수업 흐름도" icon={<List size={20}/>} onClick={() => handleGenerate('flowchart')} />
+          </div>
+        </div>
+      )}
+
+      {step === 2 && (
+        <div className="py-32 flex flex-col items-center justify-center space-y-6">
+          <Loader2 className="h-16 w-16 text-blue-600 animate-spin" />
+          <h3 className="text-xl font-bold text-slate-800">AI가 2022 교육과정과 IB 체계를 분석 중입니다...</h3>
+        </div>
+      )}
+
+      {step === 3 && plan && (
+        <div className="space-y-6">
+          <div className="flex justify-between items-center bg-white p-2 rounded-2xl shadow-sm border border-slate-200 overflow-x-auto">
+            <button onClick={() => setStep(1)} className="text-slate-500 hover:text-slate-800 font-bold px-4 flex items-center whitespace-nowrap">
+              <ChevronRight className="h-4 w-4 mr-1 rotate-180" /> 처음으로
+            </button>
+            <div className="flex space-x-1">
+              {['plan', 'worksheet', 'assessment', 'essay', 'flowchart'].map(tab => (
+                <button key={tab} onClick={() => setActiveResultTab(tab)} className={`px-4 py-2 text-sm font-bold rounded-xl transition-all whitespace-nowrap ${activeResultTab === tab ? 'bg-slate-800 text-white shadow-md' : 'text-slate-600 hover:bg-slate-100'}`}>
+                  {tab === 'plan' ? '과정안' : tab === 'worksheet' ? '학습지' : tab === 'assessment' ? '형성평가' : tab === 'essay' ? '서논술형' : '흐름도'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-white p-10 border border-slate-200 rounded-3xl shadow-md overflow-x-auto">
+            <div className="flex justify-end mb-4">
+              <button onClick={() => exportToWord("export-content", `${activeResultTab}_문서.doc`, "문서 다운로드")} className="flex items-center space-x-2 bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl font-bold text-sm transition-all active:scale-95">
+                <Download size={16} /> <span>Word 다운로드</span>
+              </button>
+            </div>
+            
+            {/* Dynamic Content Rendering */}
+            <div id="export-content" className="min-w-[700px]">
+              
+              {activeResultTab === 'plan' && (
+                <>
+                  <h1 className="text-center font-bold text-2xl mb-8">MYP 교수학습과정안</h1>
+                  <table className="w-full border-collapse border border-black mb-6">
+                    <tbody>
+                      <tr><th className="border border-black p-3 bg-slate-100 w-1/4">단원명</th><td className="border border-black p-3" colSpan="3">{plan.unitTitle}</td></tr>
+                      <tr><th className="border border-black p-3 bg-slate-100">학년 / 시수</th><td className="border border-black p-3">Year {plan.mypYear} / {formData.sessions}차시</td><th className="border border-black p-3 bg-slate-100">주요 개념</th><td className="border border-black p-3">{plan.keyConcept}</td></tr>
+                    </tbody>
+                  </table>
+                  <h2 className="text-xl font-bold bg-slate-100 p-2 border-l-4 border-slate-800 mt-6 mb-3">탐구 진술 및 질문</h2>
+                  <div className="border border-black p-4 mb-6">
+                    <p className="font-bold text-blue-700 italic mb-4 text-lg">"{plan.statementOfInquiry}"</p>
+                    <ul className="list-disc pl-5 space-y-2">
+                      <li><strong>사실적:</strong> {plan.inquiryQuestions.factual}</li>
+                      <li><strong>개념적:</strong> {plan.inquiryQuestions.conceptual}</li>
+                      <li><strong>논쟁적:</strong> {plan.inquiryQuestions.debatable}</li>
+                    </ul>
+                  </div>
+                  <h2 className="text-xl font-bold bg-slate-100 p-2 border-l-4 border-slate-800 mt-6 mb-3">학습 과정 (Action)</h2>
+                  <div className="border border-black p-4">
+                    <ol className="list-decimal pl-5 space-y-2">
+                      {plan.learningProcess.map((p, idx) => <li key={idx}>{p}</li>)}
+                    </ol>
+                  </div>
+                </>
+              )}
+
+              {activeResultTab === 'worksheet' && (
+                <>
+                  <h1 className="text-center font-bold text-2xl mb-8">학생 탐구 활동지</h1>
+                  <div className="border-2 border-black p-4 bg-slate-50 mb-8 rounded-lg text-center">
+                    <p className="font-bold text-slate-600 text-sm mb-1">탐구 진술 (Statement of Inquiry)</p>
+                    <p className="font-bold text-lg text-blue-800">"{plan.statementOfInquiry}"</p>
+                  </div>
+                  {plan.worksheetActivities.map((act, idx) => (
+                    <div key={idx} className="mb-8">
+                      <h3 className="text-lg font-bold bg-blue-50 p-2 border-l-4 border-blue-600 mb-2">활동 {idx+1}. {act.title}</h3>
+                      <p className="mb-3 text-slate-700 font-medium">{act.desc}</p>
+                      <div className="border border-slate-400 rounded-lg w-full bg-white" style={{height: '150px'}}></div>
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {activeResultTab === 'assessment' && (
+                <>
+                  <h1 className="text-center font-bold text-2xl mb-8">단원 형성평가</h1>
+                  {plan.formativeQuestions.map((q, idx) => (
+                    <div key={idx} className="mb-8 border-b border-slate-200 pb-8">
+                      <p className="font-bold text-lg mb-4">{idx+1}. {q.q}</p>
+                      <div className="border border-slate-300 rounded-lg p-4 min-h-[100px] bg-slate-50 text-slate-500 italic">
+                        [정답 및 예시 해설]<br/><br/><span className="text-blue-700 font-bold">{q.a}</span>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {activeResultTab === 'essay' && (
+                <>
+                  <h1 className="text-center font-bold text-2xl mb-8">서논술형 평가 및 채점 루브릭</h1>
+                  <div className="border-2 border-black p-5 mb-8 bg-slate-50 rounded-lg">
+                    <h3 className="font-bold text-lg mb-2 text-slate-800">[논술 문항]</h3>
+                    <p className="text-lg font-medium leading-relaxed">{plan.essayPrompt}</p>
+                  </div>
+                  <h2 className="text-xl font-bold bg-rose-50 text-rose-800 p-2 border-l-4 border-rose-600 mb-4">채점 기준표 (IB MYP 형식 적용)</h2>
+                  <table className="w-full border-collapse border border-black text-sm">
+                    <thead>
+                      <tr className="bg-slate-100">
+                        <th className="border border-black p-3 w-1/4">평가 준거</th>
+                        <th className="border border-black p-3 w-1/6">성취 수준</th>
+                        <th className="border border-black p-3">세부 성취 기준 설명</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr><td className="border border-black p-3 text-center font-bold" rowSpan="3">준거 C (생산하기)<br/>및 논리적 구조</td><td className="border border-black p-3 text-center font-bold text-rose-600">7 - 8 (탁월)</td><td className="border border-black p-3">목적과 독자를 철저히 고려하여 매우 논리적이고 설득력 높은 구조로 글을 완성함.</td></tr>
+                      <tr><td className="border border-black p-3 text-center font-bold text-rose-600">4 - 6 (우수/보통)</td><td className="border border-black p-3">글의 목적을 이해하고 적절한 근거를 1~2개 이상 제시하여 기본 구조를 갖춤.</td></tr>
+                      <tr><td className="border border-black p-3 text-center font-bold text-rose-600">1 - 3 (미흡)</td><td className="border border-black p-3">주장이 모호하거나 근거가 부족하며, 서론-본론-결론의 구조를 갖추지 못함.</td></tr>
+                    </tbody>
+                  </table>
+                </>
+              )}
+
+              {activeResultTab === 'flowchart' && (
+                <>
+                  <h1 className="text-center font-bold text-2xl mb-8 text-cyan-700">1-Page 수업 흐름도 (Overview)</h1>
+                  <table className="w-full border-collapse border-2 border-black">
+                    <tbody>
+                      <tr><td className="border border-black p-4 bg-cyan-50 font-bold text-center w-1/4">교수학습 전략</td><td className="border border-black p-4 font-bold">{plan.flowchart.strategies}</td></tr>
+                      <tr><td className="border border-black p-4 bg-cyan-50 font-bold text-center">수업 강조점</td><td className="border border-black p-4 italic">"{plan.flowchart.emphasis}"</td></tr>
+                      <tr>
+                        <td className="border border-black p-4 bg-cyan-50 font-bold text-center align-top">수업 흐름<br/>(Lesson Flow)</td>
+                        <td className="border border-black p-4">
+                          <div className="space-y-3">
+                            {plan.flowchart.flow.map((f, idx) => (
+                              <div key={idx} className="flex items-start">
+                                <span className="bg-cyan-600 text-white rounded-full w-6 h-6 flex items-center justify-center font-bold text-sm mr-3 shrink-0">{idx+1}</span>
+                                <span className="leading-relaxed font-medium">{f}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                      <tr><td className="border border-black p-4 bg-cyan-50 font-bold text-center">평가 방안</td><td className="border border-black p-4">{plan.flowchart.assessmentPlan}</td></tr>
+                      <tr>
+                        <td className="border border-black p-4 bg-cyan-50 font-bold text-center align-top">기대 효과</td>
+                        <td className="border border-black p-4">
+                          <ul className="list-disc pl-5 space-y-1">
+                            {plan.flowchart.expectedEffects.map((e, idx) => <li key={idx} className="font-medium text-slate-700">{e}</li>)}
+                          </ul>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </>
+              )}
+
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ActionButton({ color, label, icon, onClick }) {
+  const bgColors = {
+    blue: 'bg-blue-600 hover:bg-blue-700 shadow-blue-200',
+    teal: 'bg-teal-600 hover:bg-teal-700 shadow-teal-200',
+    orange: 'bg-orange-500 hover:bg-orange-600 shadow-orange-200',
+    rose: 'bg-rose-500 hover:bg-rose-600 shadow-rose-200',
+    cyan: 'bg-cyan-600 hover:bg-cyan-700 shadow-cyan-200'
+  };
+  return (
+    <button onClick={onClick} className={`${bgColors[color]} text-white font-bold py-4 px-2 rounded-2xl flex flex-col justify-center items-center space-y-2 shadow-lg transition-all active:scale-95 group`}>
+      <div className="group-hover:-translate-y-1 transition-transform">{icon}</div>
+      <span className="text-[13px]">{label}</span>
+    </button>
+  );
+}
+
+function RecordView() {
+  const [studentCount, setStudentCount] = useState(1);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [records, setRecords] = useState([]);
+  const fileInputRef = useRef(null);
+
+  const handleGenerate = () => {
+    setIsGenerating(true);
+    setTimeout(() => {
+      setRecords(generateMockRecords(studentCount));
+      setIsGenerating(false);
+    }, 2000);
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <p className="text-slate-500 text-lg mb-6">학생들의 평가 결과물을 업로드하면 AI가 분석하여 <strong className="text-slate-800">교과 세특 문구를 자동 생성</strong>합니다.</p>
+      
+      {!records.length && !isGenerating && (
+        <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+          <div className="space-y-2">
+            <label className="font-bold text-slate-700">대상 학생 수</label>
+            <input type="number" min="1" max="35" value={studentCount} onChange={(e)=>setStudentCount(e.target.value)} className="w-32 p-3 border border-slate-200 rounded-xl bg-slate-50 font-bold ml-4 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"/> 명
+          </div>
+          
+          <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed border-blue-300 bg-blue-50/30 rounded-2xl p-12 text-center cursor-pointer hover:bg-blue-50 transition-colors">
+            <input type="file" className="hidden" ref={fileInputRef} multiple />
+            <Upload className="mx-auto h-12 w-12 text-blue-500 mb-4" />
+            <p className="font-bold text-slate-800">여기를 클릭하여 학생 결과물(PDF, JPG) 업로드</p>
+          </div>
+
+          <button onClick={handleGenerate} className="w-full bg-slate-900 text-white font-bold py-4 rounded-xl shadow-lg active:scale-95 transition-transform flex justify-center items-center space-x-2">
+            <Star className="text-yellow-400" size={20}/> <span>세특 문구 자동 생성 시작</span>
+          </button>
+        </div>
+      )}
+
+      {isGenerating && (
+         <div className="py-32 flex flex-col items-center justify-center space-y-6">
+           <Loader2 className="h-16 w-16 text-blue-600 animate-spin" />
+           <h3 className="text-xl font-bold text-slate-800">AI가 학생 결과물을 심층 분석 중입니다...</h3>
+         </div>
+      )}
+
+      {records.length > 0 && !isGenerating && (
+        <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-bold">생성된 세특 내역</h2>
+            <button onClick={() => setRecords([])} className="text-sm font-bold text-slate-500 hover:text-slate-800">다시 만들기</button>
+          </div>
+          <table className="w-full border-collapse">
+            <thead><tr className="bg-slate-100"><th className="border p-3 w-16">번호</th><th className="border p-3">세특 내용</th></tr></thead>
+            <tbody>
+              {records.map((r, i) => (
+                <tr key={i}><td className="border p-3 text-center font-bold">{r.id}</td><td className="border p-4 leading-relaxed">{r.content}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ResourcesView() {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in duration-500">
+      <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm hover:shadow-md transition-shadow">
+        <Book size={32} className="text-blue-600 mb-4" />
+        <h3 className="text-xl font-bold mb-2">대구 IB 교육과정 자료</h3>
+        <p className="text-slate-500 text-sm">IB 중학교 프로그램 철학 및 평가 루브릭 공식 자료</p>
+      </div>
+      <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm hover:shadow-md transition-shadow">
+        <BookOpen size={32} className="text-teal-600 mb-4" />
+        <h3 className="text-xl font-bold mb-2">2022 개정 국어과 교육과정</h3>
+        <p className="text-slate-500 text-sm">핵심 아이디어 및 성취기준 기반 깊이 있는 학습 자료</p>
+      </div>
+    </div>
+  );
+}
+
+function MethodsView() {
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <p className="text-slate-500 text-lg mb-8">IB MYP의 탐구 기반 학습과 2022 개정 교육과정을 연결하는 국어과 맞춤형 수업 방법입니다.</p>
+      <div className="grid gap-4">
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-start space-x-4">
+          <div className="bg-blue-100 text-blue-600 p-3 rounded-xl font-bold text-xl">01</div>
+          <div><h3 className="font-bold text-lg mb-1">개념 기반 탐구 학습</h3><p className="text-slate-600 text-sm">소통, 관점 등 국어과 핵심 개념 중심의 지식 전이 유도</p></div>
+        </div>
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-start space-x-4">
+          <div className="bg-teal-100 text-teal-600 p-3 rounded-xl font-bold text-xl">02</div>
+          <div><h3 className="font-bold text-lg mb-1">과정 중심 쓰기 워크숍</h3><p className="text-slate-600 text-sm">계획-초고-수정의 전 과정에 걸친 상호 동료 피드백 활성화</p></div>
+        </div>
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-start space-x-4">
+          <div className="bg-orange-100 text-orange-600 p-3 rounded-xl font-bold text-xl">03</div>
+          <div><h3 className="font-bold text-lg mb-1">매체 리터러시 연계 PBL</h3><p className="text-slate-600 text-sm">사회 문제 해결을 위한 공익광고, 북트레일러 제작 프로젝트</p></div>
+        </div>
+      </div>
+    </div>
+  );
+}
