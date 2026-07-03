@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IB 국어과 수업 설계 도우미</title>
+  
+  <!-- 1. Tailwind CSS (안정적인 최신 CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- 2. FontAwesome (무료 아이콘 CDN) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  
+  <!-- 3. React & ReactDOM (UMD 빌드) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  
+  <!-- 4. Babel (브라우저 내 실시간 트랜스파일링) -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    body { font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; background-color: #f8fafc; margin: 0; padding: 0; }
+    /* 웹페이지 스크롤바 숨기기 (깔끔한 UI용) */
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+<body class="text-slate-800 overflow-hidden">
+  
+  <!-- React 앱이 마운트될 루트 요소 -->
+  <div id="root"></div>
+
+  <script type="text/babel">
+    /* {% raw %} */
+    const { useState, useRef, useEffect } = React;
+
+    // ==========================================
+    // 1. 공통 유틸리티 함수 (Word 다운로드)
+    // ==========================================
+    function exportToWord(elementId, filename, docTitle = "문서") {
+      const content = document.getElementById(elementId)?.innerHTML;
+      if (!content) return;
+
+      const header = `
+        <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+        <head>
+          <meta charset='utf-8'>
+          <title>${docTitle}</title>
+          <style>
+            body { font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; font-size: 11pt; line-height: 1.6; color: #000; }
+            table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+            td, th { border: 1px solid #333; padding: 12px; }
+            ul, ol { margin-top: 5px; margin-bottom: 5px; padding-left: 20px; }
+            h1 { font-size: 1.8em; margin-bottom: 15px; }
+            h2 { font-size: 1.3em; margin-bottom: 10px; border-bottom: 2px solid #000; padding-bottom: 5px; }
+            h3 { font-size: 1.1em; margin-bottom: 8px; }
+          </style>
+        </head>
+        <body>
+      `;
+      const footer = "</body></html>";
+      const sourceHTML = header + content + footer;
+      
+      const source = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(sourceHTML);
+      const fileDownload = document.createElement("a");
+      document.body.appendChild(fileDownload);
+      fileDownload.href = source;
+      fileDownload.download = filename;
+      fileDownload.click();
+      document.body.removeChild(fileDownload);
+    }
+
+    // ==========================================
+    // 2. 동적 모의 데이터(Dynamic Mock Data) 생성기
+    // ==========================================
+    function generateMockRecords(count) {
+      const records = [];
+      const templates = [
+        "수업 중 진행된 '개념 기반 탐구 학습'에서 탁월한 주도성을 보임. 교과서에 제시된 문학 작품의 표현 방식을 분석하는 데 그치지 않고, 자신의 일상적인 경험을 참신한 시각으로 연결하여 훌륭한 결과물을 창작함. 특히 서술형 형성평가에서 자신의 창작 의도와 심미적 효과를 5줄 이상의 논리적인 글로 명확하게 서술하며 IB 국어과 평가 준거 C(생산하기) 영역에서 높은 성취 보임.",
+        "매체 리터러시 연계 프로젝트에서 비판적 사고력(ATL)이 돋보이는 학생임. 형성평가지 서술형 문항을 통해 탐구 주제와 관련된 사회적 문제를 파악하고 그 해결을 위한 구체적인 방안을 제안하여 논리적 타당성을 깊이 있게 논술함. 2022 개정 교육과정에서 강조하는 '깊이 있는 학습'을 실천하며 의사소통 역량이 우수함.",
+        "과정 중심 워크숍에서 동료 피드백에 적극적으로 참여하고 자신의 글과 활동을 지속적으로 수정·보완하는 성찰적 태도(Reflective)가 돋보임. 탐구 성찰 일지 활동에서 처음에는 주장과 근거의 연결이 모호했으나 점차 타당성을 확보해가는 사고 과정을 구체적으로 기록함."
+      ];
+      for (let i = 0; i < count; i++) {
+        records.push({ id: i + 1, content: templates[i % templates.length] });
+      }
+      return records;
+    }
+
+    function generateMockIBPlanner(input) {
+      const mypYearMap = { '중학교 1학년': 2, '중학교 2학년': 3, '중학교 3학년': 4 };
+      const year = mypYearMap[input.grade] || 2;
+      
+      // 사용자의 입력을 메인 주제로 동적 추출 (없으면 기본값)
+      const rawTopic = input.topic.trim();
+      const rawImage = input.imageName;
+      const mainTopic = rawTopic ? rawTopic : (rawImage ? `[${rawImage}] 관련 텍스트 분석` : "국어과 핵심 탐구");
+
+      // 모든 템플릿 요소를 입력된 mainTopic 기반으로 동적 생성
+      return {
+        mypYear: year,
+        unitTitle: `[맞춤형] ${mainTopic} - 깊이 있는 탐구와 실제`,
+        keyConcept: "관점 (Perspective), 소통 (Communication)",
+        relatedConcepts: ["표현 (Expression)", "맥락 (Context)"],
+        globalContext: "개인적 표현과 문화적 표현 (Personal and cultural expression)",
+        statementOfInquiry: `학생들은 '${mainTopic}'을(를) 주도적으로 탐구함으로써, 다양한 관점을 이해하고 세상과 효과적으로 소통하는 방법을 기른다.`,
+        inquiryQuestions: { 
+          factual: `'${mainTopic}'을(를) 구성하는 핵심 요소와 특징은 무엇인가?`, 
+          conceptual: `'${mainTopic}'은(는) 우리의 일상 및 사회적 맥락과 어떻게 연결되는가?`, 
+          debatable: `'${mainTopic}'에 대하여 제기될 수 있는 다양한 해석 중 어떤 관점이 가장 타당한가?` 
+        },
+        koreanCurriculum: [`[2022 개정 국어] '${mainTopic}'과(와) 관련된 텍스트를 비판적으로 이해하고 창의적으로 표현한다.`],
+        learningProcess: [
+          `[도입] '${mainTopic}' 관련 실생활 사례 탐색 및 탐구 질문 도출 (동기유발)`, 
+          `[전개 1] '${mainTopic}'의 핵심 개념 및 원리 학습 (교사 미니 레슨)`, 
+          `[전개 2] 관련 텍스트 심층 분석 및 모둠별 상호 토의 (비판적 사고 ATL)`,
+          `[정리 및 실행] '${mainTopic}'을(를) 적용한 개별 결과물 제작 및 성찰 일지 작성`
+        ],
+        flowchart: {
+          strategies: "개념 기반 탐구 학습, 모둠 협력 토의, 과정 중심 평가",
+          emphasis: `교사 주도의 설명에서 벗어나, 학생의 주도적인 탐구를 통한 '${mainTopic}'의 깊이 있는 이해와 실제적 적용 강조`,
+          flow: [
+            `[도입] '${mainTopic}'에 대한 사전 지식 활성화 및 핵심 질문 제기`,
+            `[전개1] 다양한 매체 및 자료 조사를 통한 '${mainTopic}'의 다각적 분석`,
+            `[전개2] 습득한 지식을 바탕으로 모둠별 문제 해결 방안 논의`,
+            `[전개3] 개별 결과물(글쓰기/발표자료) 초고 작성 및 동료 피드백(Peer-review)`,
+            `[정리] 피드백을 반영한 최종 결과물 학급 공유 및 학습 성찰(Reflection)`
+          ],
+          assessmentPlan: `형성평가(탐구 활동지 점검 및 관찰 평가), 총괄평가('${mainTopic}' 관련 서논술형 평가 및 루브릭 채점)`,
+          expectedEffects: [
+            `'${mainTopic}'에 대한 심층적이고 구조적인 이해력 향상`, 
+            "텍스트를 비판적으로 수용하고 창의적으로 생산하는 사고 역량 강화", 
+            "협력적 의사소통 및 타인의 관점을 존중하는 태도 배양"
+          ]
+        },
+        worksheetActivities: [
+          { title: "핵심 개념 파악하기", desc: `'${mainTopic}'과(와) 관련된 주요 개념이나 원리를 마인드맵으로 구조화해 봅시다.`, space: "150px" },
+          { title: "나의 관점 세우기", desc: `탐구한 내용을 바탕으로 '${mainTopic}'에 대한 자신의 생각이나 주장을 논리적으로 정리해 봅시다.`, space: "250px" }
+        ],
+        formativeQuestions: [
+          { q: `이번 시간에 배운 '${mainTopic}'의 가장 핵심적인 특징 두 가지를 서술하시오.`, a: "(학생이 탐구 과정에서 발견한 주요 특징 두 가지를 논리적으로 서술함)" },
+          { q: `오늘 학습한 내용을 바탕으로, '${mainTopic}'이(가) 일상생활이나 현대 사회에서 적용되는 구체적인 사례를 찾아 한 문장으로 쓰시오.`, a: "(학생의 개별적 경험 및 배경지식에 따른 자유 서술)" }
+        ],
+        essayPrompt: `'${mainTopic}'에 대해 탐구한 내용을 바탕으로, 이 주제가 현대 사회에서 가지는 의미와 중요성에 대하여 자신의 견해를 한 편의 글로 논술하시오.`,
+        essayAssessment: {
+          conditions: [
+            "글의 목적과 예상 독자를 명확히 고려하여 서론-본론-결론의 구조로 작성할 것",
+            "주장을 뒷받침하는 타당한 실생활 사례나 객관적 근거를 2가지 이상 제시할 것",
+            "띄어쓰기 포함 500자 이상 800자 이내로 작성할 것"
+          ],
+          rubric: [
+            {
+              criterion: "준거 C: 생산하기\n(논리적 구조 및 설득력)",
+              levels: [
+                { score: "7-8", desc: `주제가 명확히 드러나며, 독창적이고 타당한 근거를 통해 '${mainTopic}'에 대한 깊이 있는 통찰력을 보여줌. 서-본-결의 논리적 구조가 탁월함.` },
+                { score: "5-6", desc: "글의 기본 구조를 갖추고 있으며 적절한 근거를 제시하여 주장을 무난하게 전개함." },
+                { score: "3-4", desc: "주장은 있으나 근거가 빈약하거나 글의 구조가 다소 엉성하고 연결이 부자연스러움." },
+                { score: "1-2", desc: "주제와 어긋나거나 논리적 구조(서론-본론-결론)를 전혀 갖추지 못함." },
+                { score: "0", desc: "요구사항에 맞는 답안을 아예 작성하지 않음." }
+              ]
+            },
+            {
+              criterion: "준거 D: 언어 사용하기\n(표현 및 어법)",
+              levels: [
+                { score: "7-8", desc: "주제에 적합하고 다양한 어휘를 구사하며, 어법 및 맞춤법 오류가 전혀 없이 매끄럽게 읽힘." },
+                { score: "5-6", desc: "일반적이고 평이한 어휘를 사용하며, 사소한 어법 오류가 있으나 전체적인 의미 전달에는 지장이 없음." },
+                { score: "3-4", desc: "어휘 선택이 단조롭고 문맥에 맞지 않는 표현이 종종 등장하며 맞춤법 오류가 빈번함." },
+                { score: "1-2", desc: "어법 오류가 심각하여 작성자가 전달하고자 하는 의미를 파악하기 어려움." },
+                { score: "0", desc: "평가할 수 있는 언어적 문장이 없음." }
+              ]
+            }
+          ]
+        }
+      };
+    }
+
+    // ==========================================
+    // 3. UI 컴포넌트
+    // ==========================================
+    const Toast = ({ message, onClose }) => {
+      useEffect(() => {
+        const timer = setTimeout(onClose, 3000);
+        return () => clearTimeout(timer);
+      }, [onClose]);
+
+      return (
+        <div className="fixed top-4 right-4 z-50 transition-all duration-300 transform translate-y-0 opacity-100">
+          <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded shadow-md flex items-center space-x-3">
+            <i className="fas fa-exclamation-circle text-red-500 text-lg"></i>
+            <p className="text-sm font-medium text-red-800">{message}</p>
+          </div>
+        </div>
+      );
+    };
+
+    const ErrorAlert = ({ message }) => {
+      if (!message) return null;
+      return (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-start space-x-3 shadow-sm mb-6">
+          <i className="fas fa-exclamation-circle text-red-500 mt-1"></i>
+          <span className="text-sm font-medium">{message}</span>
+        </div>
+      );
+    };
+
+    const NavButton = ({ active, onClick, icon, label }) => (
+      <button
+        onClick={onClick}
+        className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl transition-all duration-200 group relative overflow-hidden ${
+          active 
+            ? 'bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/50' 
+            : 'text-slate-400 hover:bg-slate-800 hover:text-white font-medium'
+        }`}
+      >
+        {active && <span className="absolute left-0 top-0 bottom-0 w-1.5 bg-cyan-400 rounded-r-full"></span>}
+        <div className={`transition-transform duration-200 ${active ? 'scale-110' : 'group-hover:scale-110'}`}>
+          {icon}
+        </div>
+        <span className="text-sm tracking-tight">{label}</span>
+      </button>
+    );
+
+    const ActionButton = ({ color, label, icon, onClick }) => {
+      const bgColors = {
+        blue: 'bg-blue-600 hover:bg-blue-700 shadow-blue-200',
+        teal: 'bg-teal-600 hover:bg-teal-700 shadow-teal-200',
+        orange: 'bg-orange-500 hover:bg-orange-600 shadow-orange-200',
+        rose: 'bg-rose-500 hover:bg-rose-600 shadow-rose-200',
+        cyan: 'bg-cyan-600 hover:bg-cyan-700 shadow-cyan-200'
+      };
+      return (
+        <button onClick={onClick} className={`${bgColors[color]} text-white font-bold py-4 px-2 rounded-2xl flex flex-col justify-center items-center space-y-2 shadow-lg transition-all active:scale-95 group`}>
+          <div className="group-hover:-translate-y-1 transition-transform">{icon}</div>
+          <span className="text-[13px]">{label}</span>
+        </button>
+      );
+    };
+
+    // ==========================================
+    // 4. 서브 화면 (Views)
+    // ==========================================
+    const ResourcesView = () => (
+      <div className="space-y-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="group bg-white border border-slate-200 rounded-3xl p-8 hover:shadow-lg transition-all duration-300 relative overflow-hidden cursor-pointer">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-bl-full -z-10 group-hover:scale-110 transition-transform duration-500"></div>
+            <div className="h-12 w-12 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-6 shadow-inner text-xl">
+              <i className="fas fa-book"></i>
+            </div>
+            <h3 className="text-xl font-bold text-slate-800 mb-3 tracking-tight">대구 IB 교육과정(MYP)</h3>
+            <p className="text-slate-500 mb-8 text-sm leading-relaxed">대구광역시교육청의 IB 중학교 프로그램 철학, 평가 기준, 루브릭 공식 자료입니다. 현장에 바로 적용 가능한 지침을 확인하세요.</p>
+            <div className="inline-flex items-center text-blue-600 font-bold text-sm group-hover:gap-2 transition-all">
+              대구미래교육원 자료실 <i className="fas fa-arrow-right ml-1"></i>
+            </div>
+          </div>
+
+          <div className="group bg-white border border-slate-200 rounded-3xl p-8 hover:shadow-lg transition-all duration-300 relative overflow-hidden cursor-pointer">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-teal-50 rounded-bl-full -z-10 group-hover:scale-110 transition-transform duration-500"></div>
+            <div className="h-12 w-12 bg-teal-100 text-teal-600 rounded-2xl flex items-center justify-center mb-6 shadow-inner text-xl">
+              <i className="fas fa-book-open"></i>
+            </div>
+            <h3 className="text-xl font-bold text-slate-800 mb-3 tracking-tight">2022 개정 국어과 교육과정</h3>
+            <p className="text-slate-500 mb-8 text-sm leading-relaxed">핵심 아이디어, 과정 중심 평가, 깊이 있는 학습을 강조하는 새 교육과정 총론 및 각론 자료입니다. 교육부 공식 고시를 확인하세요.</p>
+            <div className="inline-flex items-center text-teal-600 font-bold text-sm group-hover:gap-2 transition-all">
+              NCIC 정보센터 <i className="fas fa-arrow-right ml-1"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+
+    const MethodsView = () => (
+      <div className="space-y-6">
+        <p className="text-slate-500 text-lg mb-8 max-w-3xl leading-relaxed">
+          IB MYP의 탐구 기반 학습과 2022 개정 교육과정의 <strong className="text-slate-800">'깊이 있는 학습'</strong>을 교실에서 즉시 구현하기 위한 국어과 맞춤형 교수학습 방법론입니다.
+        </p>
+
+        <div className="grid gap-6">
+          <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm hover:shadow-md transition-shadow group flex items-start space-x-6">
+            <div className="text-[3rem] font-black text-blue-100 group-hover:text-blue-200 transition-colors">01</div>
+            <div>
+              <h3 className="text-xl font-bold text-slate-800 mb-2">개념 기반 탐구 학습 (Concept-Based Inquiry)</h3>
+              <p className="text-slate-600 mb-4 leading-relaxed">단순 지식 암기가 아닌, 국어과의 핵심 개념(소통, 관점, 창의성 등)을 중심으로 전이 가능한 지식을 형성합니다.</p>
+              <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 flex items-start space-x-3">
+                <i className="fas fa-lightbulb text-blue-500 mt-1"></i>
+                <span className="text-sm font-medium text-slate-700">사실적 질문 ➔ 개념적 질문 ➔ 논쟁적 질문으로 나아가는 탐구 설계</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm hover:shadow-md transition-shadow group flex items-start space-x-6">
+            <div className="text-[3rem] font-black text-teal-100 group-hover:text-teal-200 transition-colors">02</div>
+            <div>
+              <h3 className="text-xl font-bold text-slate-800 mb-2">과정 중심 쓰기 워크숍 (Process-Oriented Writing)</h3>
+              <p className="text-slate-600 mb-4 leading-relaxed">결과물이 아닌 계획-초고-수정-편집-공유의 전 과정을 교사와 동료가 피드백하며 글쓰기 역량을 기릅니다.</p>
+              <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 flex items-start space-x-3">
+                <i className="fas fa-lightbulb text-teal-500 mt-1"></i>
+                <span className="text-sm font-medium text-slate-700">미니 레슨 도입 및 상호 피드백(Peer-review) 활성화</span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm hover:shadow-md transition-shadow group flex items-start space-x-6">
+            <div className="text-[3rem] font-black text-orange-100 group-hover:text-orange-200 transition-colors">03</div>
+            <div>
+              <h3 className="text-xl font-bold text-slate-800 mb-2">매체 리터러시 연계 프로젝트 (PBL)</h3>
+              <p className="text-slate-600 mb-4 leading-relaxed">글로벌 맥락과 연계하여 사회 문제에 대한 공익 광고나 북트레일러를 제작하며 비판적 수용 능력을 기릅니다.</p>
+              <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 flex items-start space-x-3">
+                <i className="fas fa-lightbulb text-orange-500 mt-1"></i>
+                <span className="text-sm font-medium text-slate-700">다양한 매체 자료의 생산 의도와 표현 방식 평가</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+
+    const RecordView = () => {
+      const [studentCount, setStudentCount] = useState(1);
+      const [uploadedFiles, setUploadedFiles] = useState([]);
+      const [isGenerating, setIsGenerating] = useState(false);
+      const [records, setRecords] = useState([]);
+      const [error, setError] = useState('');
+      const fileInputRef = useRef(null);
+
+      const handleFileUpload = (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length > 0) {
+          setUploadedFiles(prev => [...prev, ...files]);
+          setError('');
+        }
+      };
+
+      const handleGenerate = () => {
+        if (uploadedFiles.length === 0) {
+          setError('분석할 학생들의 학습지 또는 형성평가지 파일(사진/PDF)을 1개 이상 업로드해주세요.');
+          return;
+        }
+        setError('');
+        setIsGenerating(true);
+        setTimeout(() => {
+          setRecords(generateMockRecords(studentCount));
+          setIsGenerating(false);
+        }, 2000);
+      };
+
+      return (
+        <div className="space-y-6">
+          <p className="text-slate-500 text-lg mb-6 leading-relaxed">
+            학생들이 작성한 탐구 학습지나 형성평가지를 업로드하면, AI가 서술/논술형 답변을 분석하여 <strong className="text-slate-800">생기부 입력용 맞춤형 세특</strong>을 자동 생성합니다.
+          </p>
+
+          {error && <ErrorAlert message={error} />}
+
+          {!records.length && !isGenerating && (
+            <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-3">대상 학생 수</label>
+                <div className="flex items-center space-x-3">
+                  <div className="relative flex items-center">
+                    <i className="fas fa-users text-slate-400 absolute left-3"></i>
+                    <input 
+                      type="number" min="1" max="35" 
+                      className="pl-10 w-36 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50 font-medium outline-none"
+                      value={studentCount}
+                      onChange={(e) => setStudentCount(e.target.value)}
+                    />
+                  </div>
+                  <span className="text-slate-500 font-medium">명 (최대 35명)</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-3">학생 결과물 업로드 (사진, PDF)</label>
+                <div 
+                  className={`border-2 border-dashed rounded-2xl p-10 text-center transition-all cursor-pointer ${uploadedFiles.length > 0 ? 'border-blue-300 bg-blue-50/30' : 'border-slate-300 bg-slate-50 hover:bg-slate-100'}`}
+                  onClick={() => fileInputRef.current.click()}
+                >
+                  <input type="file" accept="image/*,.pdf" multiple className="hidden" ref={fileInputRef} onChange={(e) => {
+                    if(e.target.files.length) {
+                      setUploadedFiles([...uploadedFiles, ...Array.from(e.target.files)]);
+                      setError('');
+                    }
+                  }} />
+                  <div className="flex flex-col items-center space-y-4">
+                    <div className="bg-white p-4 rounded-full shadow-sm border border-slate-100 text-blue-500 text-2xl">
+                      <i className="fas fa-upload"></i>
+                    </div>
+                    <div>
+                      <p className="text-slate-800 font-bold mb-1">여기를 클릭하여 파일을 업로드하세요</p>
+                      <p className="text-sm text-slate-500">학습지 스캔본, 태블릿 캡처본 등 (JPG, PNG, PDF 지원)</p>
+                    </div>
+                  </div>
+                </div>
+                
+                {uploadedFiles.length > 0 && (
+                  <div className="mt-6 p-5 bg-white border border-slate-200 rounded-2xl shadow-sm">
+                    <h4 className="text-sm font-bold text-slate-800 mb-3 flex items-center">
+                      <i className="fas fa-check-circle text-emerald-500 mr-2 text-lg"></i> 업로드 완료 ({uploadedFiles.length}개)
+                    </h4>
+                    <ul className="text-sm text-slate-600 space-y-2 max-h-40 overflow-y-auto">
+                      {uploadedFiles.map((file, idx) => (
+                        <li key={idx} className="flex items-center bg-slate-50 p-2 rounded-lg border border-slate-100">
+                          <i className="fas fa-file text-slate-400 mr-3"></i>
+                          <span className="font-medium truncate">{file.name}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+              <button 
+                onClick={handleGenerate} 
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 px-6 rounded-2xl flex justify-center items-center space-x-2 shadow-lg active:scale-95 transition-transform"
+              >
+                <i className="fas fa-star text-yellow-400"></i>
+                <span>{studentCount}명 교과 세특 생성 시작</span>
+              </button>
+            </div>
+          )}
+
+          {isGenerating && (
+            <div className="py-32 flex flex-col items-center justify-center space-y-6">
+              <i className="fas fa-spinner fa-spin text-blue-600 text-6xl"></i>
+              <div className="text-center">
+                <h3 className="text-xl font-extrabold text-slate-800 mb-2">AI가 학생 결과물을 심층 분석 중입니다...</h3>
+                <p className="text-slate-500">논리적 사고, IB ATL 역량, 서술형 답변의 질적 요소를 추출하고 있습니다.</p>
+              </div>
+            </div>
+          )}
+
+          {records.length > 0 && !isGenerating && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                <button onClick={() => { setRecords([]); setUploadedFiles([]); }} className="text-slate-500 hover:text-slate-800 font-bold text-sm flex items-center px-2">
+                  <i className="fas fa-chevron-left mr-1"></i> 새로 만들기
+                </button>
+                <button onClick={() => exportToWord("records-content", `국어과_교과세특_${studentCount}명.doc`, "교과세특")} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-5 rounded-xl flex items-center space-x-2 text-sm shadow-md active:scale-95 transition-transform">
+                  <i className="fas fa-download"></i><span>세특 기록 다운로드</span>
+                </button>
+              </div>
+              
+              <div className="bg-white p-10 rounded-3xl border border-slate-200 shadow-sm overflow-x-auto">
+                <div id="records-content" className="font-serif min-w-[700px] text-black">
+                  <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+                    <h1 style={{ fontSize: '1.6em', fontWeight: 'bold', margin: '0' }}>국어과 교과 세부능력 및 특기사항</h1>
+                    <p style={{ color: '#64748b', fontSize: '0.9em', marginTop: '8px' }}>대상 인원: {studentCount}명</p>
+                  </div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11pt' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ border: '1px solid #cbd5e1', padding: '12px', backgroundColor: '#f8fafc', width: '10%' }}>연번</th>
+                        <th style={{ border: '1px solid #cbd5e1', padding: '12px', backgroundColor: '#f8fafc', width: '15%' }}>이름</th>
+                        <th style={{ border: '1px solid #cbd5e1', padding: '12px', backgroundColor: '#f8fafc', width: '75%' }}>교과 세부능력 및 특기사항 (NEIS 입력용)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {records.map((record, index) => (
+                        <tr key={index}>
+                          <td style={{ border: '1px solid #cbd5e1', padding: '15px', textAlign: 'center', fontWeight: 'bold', color: '#475569' }}>{record.id}</td>
+                          <td style={{ border: '1px solid #cbd5e1', padding: '15px', textAlign: 'center', color: '#94a3b8' }}>(이름 입력)</td>
+                          <td style={{ border: '1px solid #cbd5e1', padding: '15px', lineHeight: '1.7', textAlign: 'justify' }}>{record.content}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    const PlannerView = () => {
+      const [step, setStep] = useState(1);
+      const [inputType, setInputType] = useState('text');
+      const [formData, setFormData] = useState({ grade: '중학교 1학년', scope: '단원 지도안 (Unit Planner)', sessions: 10, topic: '', imageName: '' });
+      const [isGenerating, setIsGenerating] = useState(false);
+      const [generatedPlan, setGeneratedPlan] = useState(null);
+      
+      const [resultTab, setResultTab] = useState('plan'); 
+      const [assessmentMode, setAssessmentMode] = useState('student');
+      const [essayMode, setEssayMode] = useState('student'); 
+      const [error, setError] = useState('');
+      const [toast, setToast] = useState('');
+      const fileInputRef = useRef(null);
+
+      const handleGenerate = (targetTab) => {
+        if (inputType === 'text' && !formData.topic.trim()) {
+          setError("수업 주제나 교육과정 성취기준을 텍스트로 입력해주세요.");
+          return;
+        }
+        if (inputType === 'image' && !formData.imageName) {
+          setError("교과서 해당 페이지의 사진을 업로드해주세요.");
+          return;
+        }
+        
+        setError('');
+        setIsGenerating(true);
+        setStep(3);
+        
+        setTimeout(() => {
+          setIsGenerating(false);
+          setGeneratedPlan(generateMockIBPlanner(formData));
+          setResultTab(targetTab);
+        }, 2000);
+      };
+
+      return (
+        <div className="space-y-6">
+          {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+
+          <p className="text-slate-500 text-lg mb-6 leading-relaxed">
+            수업 주제나 교과서 사진을 입력하시면, 2022 개정 교육과정 성취기준과 IB MYP 철학을 융합한 <strong className="text-slate-800">단원 지도안, 학생 활동지, 형성평가지 등</strong>을 원스톱으로 자동 설계해 드립니다.
+          </p>
+
+          {error && <ErrorAlert message={error} />}
+
+          {step < 3 && (
+            <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8">
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-slate-700">대상 학년</label>
+                  <select 
+                    className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:border-blue-500 outline-none font-medium text-slate-700 text-sm"
+                    value={formData.grade} 
+                    onChange={(e) => setFormData({...formData, grade: e.target.value})}
+                  >
+                    <option>중학교 1학년</option>
+                    <option>중학교 2학년</option>
+                    <option>중학교 3학년</option>
+                  </select>
+                </div>
+                
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-slate-700">설계 범위</label>
+                  <select 
+                    className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:border-blue-500 outline-none font-medium text-slate-700 text-sm"
+                    value={formData.scope}
+                    onChange={(e) => setFormData({...formData, scope: e.target.value, sessions: e.target.value.includes('단원') ? 10 : 1})}
+                  >
+                    <option>단원 지도안 (Unit Planner)</option>
+                    <option>차시별 지도안</option>
+                  </select>
+                </div>
+                
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-slate-700">수업 시수(차시)</label>
+                  <select 
+                    className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:border-blue-500 outline-none font-medium text-slate-700 text-sm"
+                    value={formData.sessions} 
+                    onChange={(e) => setFormData({...formData, sessions: parseInt(e.target.value)})}
+                  >
+                    {[...Array(10)].map((_, i) => <option key={i + 1} value={i + 1}>{i + 1}차시</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <hr className="border-slate-100" />
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <label className="block text-sm font-bold text-slate-700">수업 주제 입력 방식</label>
+                  <div className="flex space-x-2 bg-slate-100 p-1 rounded-lg">
+                    <button 
+                      onClick={() => setInputType('text')} 
+                      className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${inputType === 'text' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}
+                    >
+                      텍스트 입력
+                    </button>
+                    <button 
+                      onClick={() => setInputType('image')} 
+                      className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${inputType === 'image' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}
+                    >
+                      교과서 사진
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  {inputType === 'text' ? (
+                    <textarea 
+                      rows="4" 
+                      className="w-full p-4 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:border-blue-500 focus:ring-2 outline-none resize-none font-medium text-slate-800 transition-all text-sm"
+                      placeholder="단원명, 수업 주제, 주요 제재 또는 2022 개정 성취기준을 자유롭게 입력하세요."
+                      value={formData.topic} 
+                      onChange={(e) => setFormData({...formData, topic: e.target.value})}
+                    />
+                  ) : (
+                    <div 
+                      className="border-2 border-dashed border-slate-300 rounded-xl p-10 text-center bg-slate-50 hover:bg-slate-100 cursor-pointer" 
+                      onClick={() => fileInputRef.current.click()}
+                    >
+                      <input 
+                        type="file" accept="image/*" className="hidden" ref={fileInputRef} 
+                        onChange={(e) => { if(e.target.files[0]) { setFormData({...formData, imageName: e.target.files[0].name}); setError(''); } }} 
+                      />
+                      <div className="flex flex-col items-center">
+                        {formData.imageName ? (
+                          <>
+                            <div className="text-emerald-500 text-4xl mb-3"><i className="fas fa-check-circle"></i></div>
+                            <span className="text-slate-800 font-bold">{formData.imageName} 첨부 완료</span>
+                            <span className="text-sm text-blue-500 mt-2 hover:underline">다른 사진 선택하기</span>
+                          </>
+                        ) : (
+                          <>
+                            <div className="text-blue-500 text-4xl mb-3"><i className="fas fa-image"></i></div>
+                            <span className="text-slate-800 font-bold mb-1">교과서 해당 페이지 사진 업로드</span>
+                            <span className="text-sm text-slate-500">클릭하여 이미지(JPG, PNG) 파일 선택</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 pt-4">
+                <ActionButton color="blue" label="과정안 생성" icon={<i className="fas fa-table text-lg"></i>} onClick={() => handleGenerate('plan')} />
+                <ActionButton color="teal" label="학습지 생성" icon={<i className="fas fa-edit text-lg"></i>} onClick={() => handleGenerate('worksheet')} />
+                <ActionButton color="orange" label="형성평가 생성" icon={<i className="fas fa-check-square text-lg"></i>} onClick={() => handleGenerate('assessment')} />
+                <ActionButton color="rose" label="서논술형 생성" icon={<i className="fas fa-file-alt text-lg"></i>} onClick={() => handleGenerate('essay')} />
+                <ActionButton color="cyan" label="수업 흐름도" icon={<i className="fas fa-desktop text-lg"></i>} onClick={() => handleGenerate('flowchart')} />
+              </div>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div className="animate-in fade-in duration-500">
+              {isGenerating ? (
+                 <div className="flex flex-col items-center justify-center py-32 space-y-6">
+                   <i className="fas fa-spinner fa-spin text-blue-600 text-6xl"></i>
+                   <div className="text-center">
+                     <h3 className="text-xl font-extrabold text-slate-800 mb-2">AI가 교육과정을 분석하고 있습니다...</h3>
+                     <p className="text-slate-500 text-sm">2022 성취기준 매핑 및 IB MYP 탐구 질문 도출 중</p>
+                   </div>
+                 </div>
+              ) : (
+                <div className="space-y-6">
+                  
+                  <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-2 rounded-2xl shadow-sm border border-slate-200">
+                    <button onClick={() => setStep(1)} className="text-slate-500 hover:text-slate-800 font-bold text-sm px-4 flex items-center whitespace-nowrap">
+                      <i className="fas fa-chevron-left mr-2"></i> 처음으로
+                    </button>
+                    <div className="flex p-1 bg-slate-100 rounded-xl overflow-x-auto scrollbar-hide w-full md:w-auto">
+                      <button onClick={() => setResultTab('plan')} className={`whitespace-nowrap flex-1 md:flex-none px-4 py-2.5 rounded-lg text-sm font-bold transition-all ${resultTab === 'plan' ? 'bg-blue-600 text-white' : 'text-slate-500'}`}>과정안</button>
+                      <button onClick={() => setResultTab('worksheet')} className={`whitespace-nowrap flex-1 md:flex-none px-4 py-2.5 rounded-lg text-sm font-bold transition-all ${resultTab === 'worksheet' ? 'bg-teal-600 text-white' : 'text-slate-500'}`}>학습지</button>
+                      <button onClick={() => setResultTab('assessment')} className={`whitespace-nowrap flex-1 md:flex-none px-4 py-2.5 rounded-lg text-sm font-bold transition-all ${resultTab === 'assessment' ? 'bg-orange-500 text-white' : 'text-slate-500'}`}>형성평가</button>
+                      <button onClick={() => setResultTab('essay')} className={`whitespace-nowrap flex-1 md:flex-none px-4 py-2.5 rounded-lg text-sm font-bold transition-all ${resultTab === 'essay' ? 'bg-rose-500 text-white' : 'text-slate-500'}`}>서논술형</button>
+                      <button onClick={() => setResultTab('flowchart')} className={`whitespace-nowrap flex-1 md:flex-none px-4 py-2.5 rounded-lg text-sm font-bold transition-all ${resultTab === 'flowchart' ? 'bg-cyan-600 text-white' : 'text-slate-500'}`}>수업 흐름도</button>
+                    </div>
+                  </div>
+                  
+                  {/* 결과 화면들 */}
+                  {resultTab === 'plan' && (
+                    <div className="space-y-4 animate-in slide-in-from-bottom-4">
+                      <div className="flex justify-end">
+                        <button onClick={() => exportToWord("plan-content", "교수학습과정안.doc", "교수학습과정안")} className="bg-slate-900 text-white font-bold py-2.5 px-5 rounded-xl text-sm shadow-md active:scale-95 transition-transform">
+                          <i className="fas fa-download mr-2"></i>다운로드
+                        </button>
+                      </div>
+                      <div className="bg-white p-10 md:p-14 border border-slate-200 rounded-3xl shadow-sm overflow-x-auto">
+                        <div id="plan-content" className="font-serif min-w-[700px] text-[11pt] text-black">
+                          <h1 style={ { textAlign: 'center', fontSize: '1.8em', fontWeight: 'bold', marginBottom: '30px' } }>MYP 교수학습과정안 (Unit Planner)</h1>
+                          <table style={ { width: '100%', borderCollapse: 'collapse', marginBottom: '30px', border: '1px solid #000' } }>
+                            <tbody>
+                              <tr>
+                                <td style={ { border: '1px solid #000', padding: '10px', fontWeight: 'bold', backgroundColor: '#f1f5f9', width: '15%', textAlign: 'center' } }>단원명</td>
+                                <td style={ { border: '1px solid #000', padding: '10px' } } colSpan="3">{generatedPlan.unitTitle}</td>
+                              </tr>
+                              <tr>
+                                <td style={ { border: '1px solid #000', padding: '10px', fontWeight: 'bold', backgroundColor: '#f1f5f9', textAlign: 'center' } }>MYP 학년</td>
+                                <td style={ { border: '1px solid #000', padding: '10px' } }>MYP Year {generatedPlan.mypYear}</td>
+                                <td style={ { border: '1px solid #000', padding: '10px', fontWeight: 'bold', backgroundColor: '#f1f5f9', textAlign: 'center' } }>수업 시수</td>
+                                <td style={ { border: '1px solid #000', padding: '10px' } }>{formData.sessions}차시</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                          
+                          <h2 style={ { fontSize: '1.2em', fontWeight: 'bold', borderBottom: '2px solid #000', paddingBottom: '5px', marginBottom: '15px' } }>1. 탐구: 목적 설정 (Inquiry)</h2>
+                          <table style={ { width: '100%', borderCollapse: 'collapse', marginBottom: '30px', border: '1px solid #000' } }>
+                            <tbody>
+                              <tr>
+                                <td style={ { border: '1px solid #000', padding: '10px', fontWeight: 'bold', backgroundColor: '#eff6ff', width: '33%', textAlign: 'center' } }>주요 개념</td>
+                                <td style={ { border: '1px solid #000', padding: '10px', fontWeight: 'bold', backgroundColor: '#eff6ff', width: '33%', textAlign: 'center' } }>관련 개념</td>
+                                <td style={ { border: '1px solid #000', padding: '10px', fontWeight: 'bold', backgroundColor: '#eff6ff', width: '33%', textAlign: 'center' } }>글로벌 맥락</td>
+                              </tr>
+                              <tr>
+                                <td style={ { border: '1px solid #000', padding: '10px', textAlign: 'center' } }><strong>{generatedPlan.keyConcept}</strong></td>
+                                <td style={ { border: '1px solid #000', padding: '10px', textAlign: 'center' } }>{generatedPlan.relatedConcepts.join(', ')}</td>
+                                <td style={ { border: '1px solid #000', padding: '10px', textAlign: 'center' } }>{generatedPlan.globalContext}</td>
+                              </tr>
+                              <tr>
+                                <td colSpan="3" style={ { border: '1px solid #000', padding: '15px', backgroundColor: '#f8fafc' } }>
+                                  <div style={ { fontWeight: 'bold', marginBottom: '5px' } }>탐구 진술 (Statement of Inquiry)</div>
+                                  <div style={ { fontStyle: 'italic', color: '#1d4ed8' } }>"{generatedPlan.statementOfInquiry}"</div>
+                                </td>
+                              </tr>
+                              <tr>
+                                <td colSpan="3" style={ { border: '1px solid #000', padding: '15px' } }>
+                                  <div style={ { fontWeight: 'bold', marginBottom: '8px' } }>탐구 질문 (Inquiry Questions)</div>
+                                  <ul style={ { paddingLeft: '20px', margin: 0 } }>
+                                    <li><strong>사실적:</strong> {generatedPlan.inquiryQuestions.factual}</li>
+                                    <li><strong>개념적:</strong> {generatedPlan.inquiryQuestions.conceptual}</li>
+                                    <li><strong>논쟁적:</strong> {generatedPlan.inquiryQuestions.debatable}</li>
+                                  </ul>
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+
+                          <h2 style={ { fontSize: '1.2em', fontWeight: 'bold', borderBottom: '2px solid #000', paddingBottom: '5px', marginBottom: '15px' } }>2. 국가 교육과정 연계</h2>
+                          <div style={ { border: '1px solid #000', padding: '15px', marginBottom: '30px' } }>
+                            <ul style={ { paddingLeft: '20px', margin: 0 } }>
+                              {generatedPlan.koreanCurriculum.map((s,i) => <li key={i}>{s}</li>)}
+                            </ul>
+                          </div>
+
+                          <h2 style={ { fontSize: '1.2em', fontWeight: 'bold', borderBottom: '2px solid #000', paddingBottom: '5px', marginBottom: '15px' } }>3. 실행 (Action)</h2>
+                          <div style={ { border: '1px solid #000', padding: '15px', backgroundColor: '#f8fafc' } }>
+                            <ol style={ { paddingLeft: '20px', margin: 0 } }>
+                              {generatedPlan.learningProcess.map((step, i) => <li key={i}>{step}</li>)}
+                            </ol>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {resultTab === 'worksheet' && (
+                    <div className="space-y-4 animate-in slide-in-from-bottom-4">
+                      <div className="flex justify-end">
+                        <button onClick={() => exportToWord("worksheet-content", "탐구학습지.doc", "탐구학습지")} className="bg-teal-600 text-white font-bold py-2.5 px-5 rounded-xl text-sm shadow-md active:scale-95 transition-transform">
+                          <i className="fas fa-download mr-2"></i>다운로드
+                        </button>
+                      </div>
+                      <div className="bg-white p-10 md:p-14 border border-slate-200 rounded-3xl shadow-sm overflow-x-auto">
+                        <div id="worksheet-content" className="font-sans min-w-[700px] text-[11pt] text-black">
+                          <table style={ { width: '100%', borderCollapse: 'collapse', marginBottom: '30px', border: '2px solid #000' } }>
+                            <tbody>
+                              <tr>
+                                <td style={ { border: '1px solid #000', padding: '12px', backgroundColor: '#f8fafc', width: '25%', textAlign: 'center', fontWeight: 'bold' } }>학번 / 이름</td>
+                                <td style={ { border: '1px solid #000', padding: '12px', width: '75%', fontSize: '12pt', letterSpacing: '2px' } }>&nbsp;&nbsp;학년 &nbsp;&nbsp;&nbsp;반 &nbsp;&nbsp;&nbsp;번 &nbsp;&nbsp;&nbsp;이름: ______________</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                          <div style={ { textAlign: 'center', marginBottom: '35px' } }>
+                            <h1 style={ { fontSize: '2em', fontWeight: '900', margin: '0' } }>국어과 탐구 활동지</h1>
+                            <h2 style={ { fontSize: '1.2em', fontWeight: 'normal', marginTop: '10px', color: '#475569' } }>단원: {generatedPlan.unitTitle}</h2>
+                          </div>
+                          <div style={ { padding: '20px', border: '2px solid #cbd5e1', backgroundColor: '#f8fafc', marginBottom: '30px', borderRadius: '8px' } }>
+                            <p style={ { margin: 0, fontWeight: 'bold', color: '#0d9488' } }>💡 탐구 진술 (Statement of Inquiry):</p>
+                            <p style={ { margin: '8px 0 0 0', fontStyle: 'italic', fontSize: '1.1em' } }>"{generatedPlan.statementOfInquiry}"</p>
+                          </div>
+                          {generatedPlan.worksheetActivities.map((act, idx) => (
+                            <div key={idx} style={ { marginBottom: '30px' } }>
+                              <h3 style={ { fontSize: '1.2em', fontWeight: 'bold', backgroundColor: '#f1f5f9', padding: '10px 15px', borderLeft: '5px solid #0d9488', margin: '0 0 15px 0' } }>활동 {idx + 1}. {act.title}</h3>
+                              <p style={ { margin: '0 0 15px 0' } }>{act.desc}</p>
+                              <div style={ { border: '1px solid #94a3b8', height: act.space, width: '100%', backgroundColor: '#fff', borderRadius: '4px' } }></div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {resultTab === 'assessment' && (
+                    <div className="space-y-4 animate-in slide-in-from-bottom-4">
+                      <div className="flex justify-between items-center bg-white p-3 rounded-2xl shadow-sm border border-slate-200">
+                        <div className="flex bg-slate-100 p-1 rounded-xl">
+                          <button onClick={() => setAssessmentMode('student')} className={`px-4 py-2 text-sm font-bold rounded-lg ${assessmentMode === 'student' ? 'bg-orange-500 text-white' : 'text-slate-500'}`}>학생용</button>
+                          <button onClick={() => setAssessmentMode('teacher')} className={`px-4 py-2 text-sm font-bold rounded-lg ${assessmentMode === 'teacher' ? 'bg-red-500 text-white' : 'text-slate-500'}`}>교사용(정답)</button>
+                        </div>
+                        <button onClick={() => exportToWord("assessment-content", "형성평가.doc", "형성평가")} className="bg-orange-500 text-white font-bold py-2 px-4 rounded-xl text-sm shadow-md active:scale-95 transition-transform"><i className="fas fa-download mr-1"></i> 다운로드</button>
+                      </div>
+                      <div className="bg-white p-10 md:p-14 border border-slate-200 rounded-3xl shadow-sm overflow-x-auto">
+                        <div id="assessment-content" className="font-sans min-w-[700px] text-[11pt] text-black">
+                          <h1 style={ { textAlign: 'center', fontSize: '2em', fontWeight: '900', margin: '0 0 40px 0' } }>국어과 형성평가</h1>
+                          {generatedPlan.formativeQuestions.map((q, idx) => (
+                            <div key={idx} style={ { marginBottom: '40px' } }>
+                              <p style={ { fontWeight: 'bold', marginBottom: '15px', fontSize: '1.15em' } }>{idx + 1}. {q.q}</p>
+                              <div style={ { border: assessmentMode === 'student' ? '1px solid #94a3b8' : '2px dashed #ef4444', height: assessmentMode === 'student' ? '150px' : 'auto', padding: assessmentMode === 'teacher' ? '20px' : '0', backgroundColor: assessmentMode === 'teacher' ? '#fef2f2' : '#fff', borderRadius: '4px' } }>
+                                {assessmentMode === 'teacher' && <><p style={ { fontWeight: 'bold', margin: '0 0 8px 0', color: '#b91c1c' } }>[정답/해설]</p><p style={ { margin: 0, color: '#b91c1c' } }>{q.a}</p></>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {resultTab === 'essay' && (
+                    <div className="space-y-4 animate-in slide-in-from-bottom-4">
+                      <div className="flex justify-between items-center bg-white p-3 rounded-2xl shadow-sm border border-slate-200">
+                        <div className="flex bg-slate-100 p-1 rounded-xl">
+                          <button onClick={() => setEssayMode('student')} className={`px-4 py-2 text-sm font-bold rounded-lg ${essayMode === 'student' ? 'bg-rose-500 text-white' : 'text-slate-500'}`}>평가지</button>
+                          <button onClick={() => setEssayMode('rubric')} className={`px-4 py-2 text-sm font-bold rounded-lg ${essayMode === 'rubric' ? 'bg-rose-500 text-white' : 'text-slate-500'}`}>루브릭</button>
+                        </div>
+                        <button onClick={() => exportToWord("essay-content", "서논술형.doc", "서논술형")} className="bg-rose-500 text-white font-bold py-2 px-4 rounded-xl text-sm shadow-md active:scale-95 transition-transform"><i className="fas fa-download mr-1"></i> 다운로드</button>
+                      </div>
+                      <div className="bg-white p-10 md:p-14 border border-slate-200 rounded-3xl shadow-sm overflow-x-auto">
+                        <div id="essay-content" className="font-sans min-w-[700px] text-[11pt] text-black">
+                          {essayMode === 'student' ? (
+                            <>
+                              <h1 style={ { textAlign: 'center', fontSize: '2em', fontWeight: '900', margin: '0 0 35px 0' } }>서술·논술형 평가</h1>
+                              <div style={ { marginBottom: '25px', padding: '20px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', borderRadius: '8px' } }>
+                                <h3 style={ { margin: '0 0 10px 0', fontSize: '1.2em' } }>[문항]</h3>
+                                <p style={ { margin: '0', fontSize: '1.1em' } }>{generatedPlan.essayPrompt}</p>
+                              </div>
+                              <div style={ { border: '1px solid #94a3b8', height: '400px', width: '100%', borderRadius: '4px' } }></div>
+                            </>
+                          ) : (
+                            <>
+                              <h1 style={ { textAlign: 'center', fontSize: '1.8em', fontWeight: '900', margin: '0 0 40px 0' } }>서술·논술형 채점 기준표(루브릭)</h1>
+                              <table style={ { width: '100%', borderCollapse: 'collapse', border: '1px solid #000' } }>
+                                <thead>
+                                  <tr style={ { backgroundColor: '#f1f5f9' } }>
+                                    <th style={ { border: '1px solid #000', padding: '12px', width: '20%' } }>평가 요소</th>
+                                    <th style={ { border: '1px solid #000', padding: '12px', width: '10%' } }>수준</th>
+                                    <th style={ { border: '1px solid #000', padding: '12px', width: '70%' } }>성취 기준 설명</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {generatedPlan.essayAssessment.rubric.map((item, idx) => (
+                                    <React.Fragment key={idx}>
+                                      {item.levels.map((level, lIdx) => (
+                                        <tr key={`${idx}-${lIdx}`}>
+                                          {lIdx === 0 && <td rowSpan={item.levels.length} style={ { border: '1px solid #000', padding: '15px', fontWeight: 'bold', textAlign: 'center', backgroundColor: '#f8fafc' } }>{item.criterion}</td>}
+                                          <td style={ { border: '1px solid #000', padding: '12px', textAlign: 'center', fontWeight: 'bold', color: '#e11d48' } }>{level.score}</td>
+                                          <td style={ { border: '1px solid #000', padding: '12px' } }>{level.desc}</td>
+                                        </tr>
+                                      ))}
+                                    </React.Fragment>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {resultTab === 'flowchart' && (
+                    <div className="space-y-4 animate-in slide-in-from-bottom-4">
+                      <div className="flex justify-end">
+                        <button onClick={() => exportToWord("flowchart-content", "수업흐름도.doc", "수업 흐름도")} className="bg-cyan-600 text-white font-bold py-2.5 px-5 rounded-xl text-sm shadow-md active:scale-95 transition-transform"><i className="fas fa-download mr-2"></i>다운로드</button>
+                      </div>
+                      <div className="bg-white p-10 md:p-14 border border-slate-200 rounded-3xl shadow-sm overflow-x-auto">
+                        <div id="flowchart-content" className="font-sans min-w-[700px] text-[11pt] text-black">
+                          <h1 style={ { textAlign: 'center', fontSize: '1.8em', fontWeight: '900', margin: '0 0 30px 0', color: '#0891b2' } }>1-Page 수업 흐름도</h1>
+                          <table style={ { width: '100%', borderCollapse: 'collapse', border: '2px solid #000' } }>
+                            <tbody>
+                              <tr><td style={ { border: '1px solid #000', padding: '15px', backgroundColor: '#ecfeff', width: '20%', fontWeight: 'bold', textAlign: 'center' } }>교수학습 전략</td><td style={ { border: '1px solid #000', padding: '15px', fontWeight: 'bold' } }>{generatedPlan.flowchart.strategies}</td></tr>
+                              <tr><td style={ { border: '1px solid #000', padding: '15px', backgroundColor: '#ecfeff', fontWeight: 'bold', textAlign: 'center' } }>수업 강조점</td><td style={ { border: '1px solid #000', padding: '15px', fontStyle: 'italic' } }>"{generatedPlan.flowchart.emphasis}"</td></tr>
+                              <tr>
+                                <td style={ { border: '1px solid #000', padding: '15px', backgroundColor: '#ecfeff', fontWeight: 'bold', textAlign: 'center' } }>수업 흐름</td>
+                                <td style={ { border: '1px solid #000', padding: '20px' } }>
+                                  <div style={ { display: 'flex', flexDirection: 'column', gap: '10px' } }>
+                                    {generatedPlan.flowchart.flow.map((step, idx) => (
+                                      <div key={idx} style={ { display: 'flex' } }><strong style={ { color: '#0891b2', marginRight: '8px' } }>{idx+1}.</strong> <span>{step}</span></div>
+                                    ))}
+                                  </div>
+                                </td>
+                              </tr>
+                              <tr><td style={ { border: '1px solid #000', padding: '15px', backgroundColor: '#ecfeff', fontWeight: 'bold', textAlign: 'center' } }>평가 방안</td><td style={ { border: '1px solid #000', padding: '15px' } }>{generatedPlan.flowchart.assessmentPlan}</td></tr>
+                              <tr>
+                                <td style={ { border: '1px solid #000', padding: '15px', backgroundColor: '#ecfeff', fontWeight: 'bold', textAlign: 'center' } }>기대 효과</td>
+                                <td style={ { border: '1px solid #000', padding: '15px' } }>
+                                  <ul style={ { margin: 0, paddingLeft: '20px' } }>{generatedPlan.flowchart.expectedEffects.map((effect, idx) => <li key={idx}>{effect}</li>)}</ul>
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    const App = () => {
+      const [activeTab, setActiveTab] = useState('planner');
+
+      return (
+        <div className="flex h-screen bg-slate-50 font-sans text-slate-800 overflow-hidden">
+          <aside className="w-72 bg-slate-900 flex flex-col z-20 shadow-xl">
+            <div className="p-6 flex items-center space-x-3 border-b border-slate-800">
+              <div className="bg-blue-600 p-2 rounded-xl text-white text-xl"><i className="fas fa-book-open"></i></div>
+              <h1 className="text-[1.1rem] font-bold text-white tracking-tight leading-tight">IB & 2022<br/>국어 수업 설계</h1>
+            </div>
+            <nav className="p-4 space-y-2 flex-1">
+              <NavButton active={activeTab === 'planner'} onClick={() => setActiveTab('planner')} icon={<i className="fas fa-file-alt text-lg"></i>} label="교수학습과정안 설계" />
+              <NavButton active={activeTab === 'record'} onClick={() => setActiveTab('record')} icon={<i className="fas fa-star text-lg"></i>} label="교과 세특 자동 생성" />
+              <NavButton active={activeTab === 'methods'} onClick={() => setActiveTab('methods')} icon={<i className="fas fa-lightbulb text-lg"></i>} label="국어과 맞춤 수업 방법" />
+              <NavButton active={activeTab === 'resources'} onClick={() => setActiveTab('resources')} icon={<i className="fas fa-book text-lg"></i>} label="교육과정 자료실" />
+            </nav>
+          </aside>
+
+          <main className="flex-1 flex flex-col h-screen relative overflow-hidden bg-slate-50">
+            <header className="h-16 bg-white/80 backdrop-blur border-b border-slate-200 flex items-center px-8 justify-between shadow-sm z-10 absolute top-0 w-full">
+              <h2 className="text-lg font-bold text-slate-800">
+                {activeTab === 'planner' && 'AI 맞춤형 수업 자료 설계'}
+                {activeTab === 'record' && 'AI 교과 세특 생성'}
+                {activeTab === 'methods' && '국어과 맞춤형 수업 방법'}
+                {activeTab === 'resources' && '교육과정 자료실'}
+              </h2>
+            </header>
+            <div className="flex-1 overflow-y-auto p-8 pt-24 pb-20">
+              <div className="max-w-5xl mx-auto">
+                {activeTab === 'planner' && <PlannerView />}
+                {activeTab === 'record' && <RecordView />}
+                {activeTab === 'methods' && <MethodsView />}
+                {activeTab === 'resources' && <ResourcesView />}
+              </div>
+            </div>
+          </main>
+        </div>
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+    /* {% endraw %} */
+  </script>
+</body>
+</html>
